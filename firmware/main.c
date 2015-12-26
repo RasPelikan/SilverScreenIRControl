@@ -66,12 +66,25 @@ int main() {
 			 * switch activity light on and off
 			 */
 			int poti = get_potentiometer_position();
-			if (poti > 950) {
+
+			/*
+			 * programming mode
+			 */
+			if (poti < 100) {
 
 				PORTB |= _BV(PB0);
-				_delay_ms(100);
+				_delay_ms(50);
 				PORTB &= ~(_BV(PB0));
-				_delay_ms(100);
+
+			}
+			/*
+			 * control mode
+			 */
+			else {
+
+				PORTB |= _BV(PB0);
+				_delay_ms(200);
+				PORTB &= ~(_BV(PB0));
 
 			}
 
