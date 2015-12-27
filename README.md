@@ -9,4 +9,6 @@ Schema:
 ![schema](https://raw.githubusercontent.com/RasPelikan/SilverScreenIRControl/gh-pages/schema.png)
 Breadboard:
 ![breadboard](https://raw.githubusercontent.com/RasPelikan/SilverScreenIRControl/gh-pages/breadboard.png)
+PC:
+![PCB](https://raw.githubusercontent.com/RasPelikan/SilverScreenIRControl/gh-pages/pcb.png)
 
