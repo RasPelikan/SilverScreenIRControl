@@ -103,9 +103,9 @@
  * Change hardware pin here for ATMEL ATMega/ATTiny/XMega
  *---------------------------------------------------------------------------------------------------------------------------------------------------
  */
-#if defined (ATMEL_AVR) || defined (__AVR_XMEGA__)                      // use PB1 as IR input on AVR
+#if defined (ATMEL_AVR) || defined (__AVR_XMEGA__)                      // use PB2 as IR input on AVR
 #define IRMP_PORT_LETTER                      B
-#define IRMP_BIT_NUMBER                       1
+#define IRMP_BIT_NUMBER                       2
 
 /*---------------------------------------------------------------------------------------------------------------------------------------------------
  * Change hardware pin here for PIC C18 or XC8 compiler

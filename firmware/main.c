@@ -11,8 +11,13 @@
 /*
  * forward declarations
  */
-int get_potentiometer_position();
+static int get_potentiometer_position();
 static void timer1_init(void);
+static void go_asleep();
+static void wait_n_seconds(float seconds, void (*cmd)());
+
+static void (*command)();                             // command executed after n seconds
+static int number_of_interrupts;                      // number of interrupts necessary to wait n seconds
 
 /*
  * Timer1 interrupt for processing IR-input
@@ -29,22 +34,62 @@ ISR(COMPA_VECT) {
 }
 
 /*
+ * "wait_n_seconds" timer
+ */
+ISR(TIMER0_COMPA_vect) {
+
+	// decrease counter
+	if (--number_of_interrupts == 0) {
+
+		// disable timer
+		TIMSK &= ~(_BV(TOIE0));
+
+		void (*cmd)() = command;
+		command = NULL;
+
+		// run command if time elapsed
+		(*cmd)();
+
+	}
+
+}
+
+/*
+ * Needed for ADC noise reduction mode
+ */
+EMPTY_INTERRUPT(ADC_vect);
+
+/*
+ * Needed for "wake up on pin-change"
+ */
+ISR(INT0_vect) {
+
+	cli();
+
+	GIMSK &= ~_BV(INT0);
+
+	sei();
+
+}
+
+/*
  * Main routine, called on booting
  */
 int main() {
 
 	/*
-	 * initialize activity indicator
+	 * initialize activity indicator and up/down-pins
 	 */
-	DDRB |= _BV(PB0);                                 // LED pin to output
-	PORTB &= ~(_BV(PB0));                             // switch LED off (active low)
+	DDRB |= _BV(PB0) | _BV(PB1) | _BV(PB4);
+	PORTB = 0x00;                                     // every pin is low
 
 	/*
 	 * initialize ADC for potentiometer
 	 */
+	ADMUX |= _BV(MUX0) | _BV(MUX1);                   // measure on PB3 (= ADC3)
 	ADMUX &= ~(_BV(REFS0) | _BV(REFS1) | _BV(REFS2)); // AREF = AVcc
 	ADCSRA = _BV(ADPS2) | _BV(ADPS1) | _BV(ADPS2);    // set prescaler to 128 = 8MHz / 128 = 64kHz
-	ADCSRA = _BV(ADEN);                               // enable ADC
+	ADCSRA = _BV(ADEN) | _BV(ADIE);                   // enable ADC and activate interrupt
 
 	/*
 	 * initialize IRMP for IR-decoding
@@ -60,7 +105,17 @@ int main() {
 
 	while (1) {
 
+		/*
+		 * IR-command received?
+		 */
 		if (irmp_get_data(&irmp_data)) {
+
+			/*
+			 * switch on potentiometer-line (Q1)
+			 * and sign activity
+			 */
+			PORTB |= _BV(PB0);
+			_delay_ms(10);
 
 			/*
 			 * switch activity light on and off
@@ -70,11 +125,21 @@ int main() {
 			/*
 			 * programming mode
 			 */
-			if (poti < 100) {
+			if (poti < 200) {
 
-				PORTB |= _BV(PB0);
-				_delay_ms(50);
-				PORTB &= ~(_BV(PB0));
+				if (poti < 10) {
+
+					PORTB |= _BV(PB1);
+					_delay_ms(200);
+					PORTB &= ~(_BV(PB1));
+
+				} else {
+
+					PORTB |= _BV(PB4);
+					_delay_ms(200);
+					PORTB &= ~(_BV(PB4));
+
+				}
 
 			}
 			/*
@@ -82,11 +147,22 @@ int main() {
 			 */
 			else {
 
-				PORTB |= _BV(PB0);
-				_delay_ms(200);
-				PORTB &= ~(_BV(PB0));
 
 			}
+
+			/*
+			 * switch off potentiometer-line (Q1)
+			 * and sign activity
+			 */
+			PORTB &= ~(_BV(PB0));
+
+		}
+		/*
+		 * if no IR-command received than go asleep after 1 second
+		 */
+		else if (command == NULL) {
+
+			wait_n_seconds(5, go_asleep);
 
 		}
 
@@ -94,19 +170,48 @@ int main() {
 
 }
 
+static void go_asleep() {
+
+	/*
+	 * initialize "wake up on pin-change" on B2
+	 */
+	GIMSK |= _BV(INT0);
+	MCUCR &= ~(_BV(ISC01) | _BV(ISC00));              // INT0 on low level
+
+	sei();
+	set_sleep_mode(SLEEP_MODE_PWR_DOWN);              // power down
+	sleep_mode();                                     // enter sleep mode
+
+}
+
+static void wait_n_seconds(float seconds, void (*cmd)()) {
+
+	// store information for timer-interrupt
+	command = cmd;
+	number_of_interrupts = seconds * 31;
+
+	// enable timer
+	OCR0A = 252; // 31 times of compare matches at 252 (at prescaler 1024) is 1 second
+	TCNT0 = 0;  // start at counter 0
+	TCCR0A |= _BV(WGM01); // compare-match
+	TCCR0B |= _BV(CS00) | _BV(CS02); // prescaler 1024
+	TIMSK |= _BV(OCIE0A);
+
+}
+
+static void store_command(bool down, IRMP_DATA *comand) {
+
+
+
+}
+
 int get_potentiometer_position() {
 
-	// measure on PB2
-	ADMUX |= _BV(MUX0);
-
-	// start single convertion
-	// write ’1′ to ADSC
-	ADCSRA |= _BV(ADSC);
-
-	// wait for conversion to complete
-	// ADSC becomes ’0′ again
-	// till then, run loop continuously
-	while (ADCSRA & _BV(ADSC));
+	// start single conversion
+	set_sleep_mode(SLEEP_MODE_ADC);     // noise reduction
+	sleep_enable();						// enable sleep
+	sleep_cpu();						// enter sleep mode
+	sleep_disable();					// first thing to do is disable sleep
 
 	// read low and high byte as result
 	return ADCL | (ADCH << 8);
