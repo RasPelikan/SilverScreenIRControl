@@ -10,21 +10,34 @@
 #include "irmp.h"
 
 /*
+ * constants
+ */
+#define TIME_PERIOD_FOR_HIDING   60.0                 // time the silver screen needs to hide entirely
+#define POTI_PROGRAMMING         200                  // max. poti-value which causes programming mode
+#define POTI_PROGRAMMING_DOWN    10                   // max. poti-value which causes programming down-button
+#define ACTIVITY_INDICATOR_PIN   PB0                  // pin for activity indicator
+#define UP_PIN                   PB1                  // pin for up-relais
+#define DOWN_PIN                 PB4                  // pin for down-relais
+#define SLEEP_TIMEOUT_SECONDS    2                    // seconds to elapse until hibernate
+#define ASUME_INITIALLY_UP       true                 // whether to asume the silver screen is entirely hidden after power up
+
+/*
  * globals
  */
 IRMP_DATA EEMEM up_button_signature;                  // EEPROM memory address for signature of the up-button
 IRMP_DATA EEMEM down_button_signature;                // EEPROM memory address for signature of the down-button
-static IRMP_DATA up_button;
-static IRMP_DATA down_button;
+static IRMP_DATA up_button;                           // signature of the up-button
+static IRMP_DATA down_button;                         // signature of the down-button
 static void (*command)();                             // command executed after n seconds
 static int number_of_interrupts;                      // number of interrupts necessary to wait n seconds
+static bool entirely_hidden = ASUME_INITIALLY_UP;     // whether and action was interrupted
 
 /*
  * bring MCU into hibernate
  */
 static void go_asleep() {
 
-	PORTB &= ~(_BV(PB0));                             // turn off activity indicator
+	PORTB &= ~(_BV(ACTIVITY_INDICATOR_PIN));          // turn off activity indicator (if not yet)
 
 	/*
 	 * initialize "wake up on pin-change" on B2
@@ -45,11 +58,21 @@ static void go_asleep() {
  */
 static void reset_n_seconds(float seconds, void (*cmd)()) {
 
-	if (cmd == command) {
+	if (cmd == command) {                             // if stored command is given command
 
-		number_of_interrupts = seconds * 31;
+		number_of_interrupts = seconds * 31;          // then reset counter
 
 	}
+
+}
+
+/*
+ * disable the timer used by "wait_n_seconds"
+ */
+static void reset_timer() {
+
+	TIMSK &= ~(_BV(TOIE0));                           // disable timer
+	command = NULL;                                   // delete command store to be executed after timeout
 
 }
 
@@ -58,6 +81,16 @@ static void reset_n_seconds(float seconds, void (*cmd)()) {
  * for 31 times since one second is elapsed
  */
 static void wait_n_seconds(float seconds, void (*cmd)()) {
+
+	if (seconds == 0) {                               // stop running a running timer
+
+		reset_timer();                                // reset timer
+		if (cmd != NULL) {                            // if abort-command is given
+			(*cmd)();                                 // then execute it
+		}
+		return;                                       // leave and don't start a new timer
+
+	}
 
 	// store information for timer-interrupt
 	command = cmd;
@@ -78,13 +111,12 @@ static void wait_n_seconds(float seconds, void (*cmd)()) {
 int get_potentiometer_position() {
 
 	// start single conversion
-	set_sleep_mode(SLEEP_MODE_ADC);     // noise reduction
-	sleep_enable();						// enable sleep
-	sleep_cpu();						// enter sleep mode
-	sleep_disable();					// first thing to do is disable sleep
+	set_sleep_mode(SLEEP_MODE_ADC);                   // noise reduction
+	sleep_enable();						              // enable sleep
+	sleep_cpu();					 	              // enter sleep mode
+	sleep_disable();					              // first thing to do is to disable sleep
 
-	// read low and high byte as result
-	return ADCL | (ADCH << 8);
+	return ADCL | (ADCH << 8);                        // read low and high byte as result
 
 }
 
@@ -96,14 +128,9 @@ ISR(TIMER0_COMPA_vect) {
 	// decrease counter and check wether time-period has elapsed
 	if (--number_of_interrupts == 0) {
 
-		// disable timer
-		TIMSK &= ~(_BV(TOIE0));
-
-		void (*cmd)() = command;
-		command = NULL;
-
-		// run command if time elapsed
-		(*cmd)();
+		void (*cmd)() = command;                      // save command
+		reset_timer();                                // reset timer
+		(*cmd)();                                     // run command
 
 	}
 
@@ -119,17 +146,10 @@ EMPTY_INTERRUPT(ADC_vect);
  */
 ISR(INT0_vect) {
 
-	/*
-	 * disable all interrupts: INT0 fires repeatedly as long as INT0 is low
-	 */
-	cli();
-
-	GIMSK &= ~_BV(INT0);  // disable INT0-interrupt
-
-	/*
-	 * re-enable all interrupts
-	 */
-	sei();
+	cli();                                            // disable all interrupts:
+	                                                  // INT0 fires repeatedly as long as INT0 is low
+	GIMSK &= ~_BV(INT0);                              // disable INT0-interrupt
+	sei();                                            // re-enable all interrupts
 
 }
 
@@ -154,7 +174,7 @@ ISR(COMPA_VECT) {
  */
 static void timer1_init(void) {
 
-	#if defined (__AVR_ATtiny45__) || defined (__AVR_ATtiny85__)                // ATtiny45 / ATtiny85:
+	#if defined (__AVR_ATtiny45__) || defined (__AVR_ATtiny85__) // ATtiny45 / ATtiny85:
 
 		#if F_CPU >= 16000000L
 			OCR1C = (F_CPU / F_INTERRUPTS / 8) - 1; // compare value: 1/15000 of CPU frequency, presc = 8
@@ -178,11 +198,12 @@ static void timer1_init(void) {
 }
 
 /*
- * initialize activity indicator (PB0) and up(PB1)/down(PB4)-pins
+ * initialize activity indicator and up/down-pins
  */
 static void initialize_io() {
 
-	DDRB |= _BV(PB0) | _BV(PB1) | _BV(PB4);           // configure PB0, PB1 and PB4 as out
+	// configure out-pins
+	DDRB |= _BV(ACTIVITY_INDICATOR_PIN) | _BV(UP_PIN) | _BV(DOWN_PIN);
 	PORTB = 0x00;                                     // every pin is low
 
 }
@@ -250,17 +271,17 @@ static void store_command_to_eeprom(bool down, IRMP_DATA *irmp_data) {
  */
 static bool is_up_button_pressed(IRMP_DATA *irmp_data) {
 
-	if (irmp_data->protocol != up_button.protocol) {
+	if (irmp_data->protocol != up_button.protocol) {  // wrong protocol?
 		return false;
 	}
-	if (irmp_data->address != up_button.address) {
+	if (irmp_data->address != up_button.address) {    // wrong address?
 		return false;
 	}
-	if (irmp_data->command != up_button.command) {
+	if (irmp_data->command != up_button.command) {    // wrong command?
 		return false;
 	}
 
-	return true;
+	return true;                                      // protocol, address and command matches
 
 }
 
@@ -269,24 +290,48 @@ static bool is_up_button_pressed(IRMP_DATA *irmp_data) {
  */
 static bool is_down_button_pressed(IRMP_DATA *irmp_data) {
 
-	if (irmp_data->protocol != down_button.protocol) {
+	if (irmp_data->protocol != down_button.protocol) {// wrong protocol?
 		return false;
 	}
-	if (irmp_data->address != down_button.address) {
+	if (irmp_data->address != down_button.address) {  // wrong address?
 		return false;
 	}
-	if (irmp_data->command != down_button.command) {
+	if (irmp_data->command != down_button.command) {  // wrong command?
 		return false;
 	}
 
-	return true;
+	return true;                                      // protocol, address and command matches
 
 }
 
+/*
+ * disable up- and down-pins
+ */
 static void disable_up_and_down() {
 
-	PORTB &= ~(_BV(PB1));                             // disable up-line
-	PORTB &= ~(_BV(PB4));                             // disable down-line
+	PORTB &= ~(_BV(ACTIVITY_INDICATOR_PIN));          // turn off activity indicator
+	PORTB &= ~(_BV(UP_PIN));                          // disable up-pin
+	PORTB &= ~(_BV(DOWN_PIN));                        // disable down-pin
+
+}
+
+/*
+ * disable up-pin after being entirely hidden
+ */
+static void disable_up() {
+
+	entirely_hidden = true;                           // a complete up-cycle was done, so now it is safe
+	                                                  // to assume that the silver screen is hidden
+	disable_up_and_down();                            // disable pins
+
+}
+
+/*
+ * disable down-pin after
+ */
+static void disable_down() {
+
+	disable_up_and_down();
 
 }
 
@@ -300,32 +345,68 @@ static void process_irmp(IRMP_DATA *irmp_data) {
 	/*
 	 * programming mode
 	 */
-	if (poti < 200) {
+	if (poti < POTI_PROGRAMMING) {
 
-		PORTB |= _BV(PB0);                           // turn on activity indicator
+		PORTB |= _BV(ACTIVITY_INDICATOR_PIN);         // turn on activity indicator
 
-		bool down = poti < 10;                       // minimum position means "program down"
+		bool down = poti < POTI_PROGRAMMING_DOWN;    // minimum position means "program down"
 		store_command_to_eeprom(down, irmp_data);    // store to eeprom
 
 	}
 	/*
 	 * control mode
 	 */
-	else if (is_up_button_pressed(irmp_data)) {
+	else if (is_up_button_pressed(irmp_data)) {       // up-button pressed:
 
-		PORTB |= _BV(PB0);                           // turn on activity indicator
-		PORTB |= _BV(PB1);                           // enable up-line
+		if (command == disable_down) {                // if down is in progress
 
-		wait_n_seconds(10, disable_up_and_down);
+			wait_n_seconds(0, disable_up_and_down);   // then abort immediately
+
+		}
+		else if (command == disable_up) {             // if up is already in progress
+			                                          // then do nothing -> ignore it
+		}
+		else {                                        // device was sleeping
+
+			entirely_hidden = false;                  // mark as "not entirely hidden"
+
+			PORTB |= _BV(ACTIVITY_INDICATOR_PIN);     // turn on activity indicator
+			PORTB |= _BV(UP_PIN);                     // enable up-pin
+
+			wait_n_seconds(TIME_PERIOD_FOR_HIDING,
+					disable_up);                      // disable up-pin after a defined period of time
+
+		}
 
 	}
-	else if (is_down_button_pressed(irmp_data)) {
+	else if (is_down_button_pressed(irmp_data)) {     // down-button pressed:
 
-		PORTB |= _BV(PB0);                           // turn on activity indicator
-		PORTB |= _BV(PB4);                           // enable down-line
+		if (command == disable_up) {                  // up in progress?
 
-		float seconds = 10.0 / 1024 * poti;
-		wait_n_seconds(seconds, disable_up_and_down);
+			wait_n_seconds(0, disable_up_and_down);   // then abort immediately
+
+		} else {                                      // otherwise:
+
+			PORTB |= _BV(ACTIVITY_INDICATOR_PIN);     // turn on activity indicator
+			PORTB |= _BV(DOWN_PIN);                   // enable down-pin
+
+			float seconds;                            // defining the period of down-movement
+			if (entirely_hidden) {                    // if silver screen was entirely hidden then
+
+				seconds = TIME_PERIOD_FOR_HIDING /    // the period is the fraction of the defined
+						1024 * poti;                  // up-period proportional to the current poti-position
+
+			} else {                                  // otherwise
+
+				seconds = 0.5;                        // do a small step
+
+			}
+
+			entirely_hidden = false;                  // mark as "not entirely hidden"
+
+			wait_n_seconds(seconds, disable_down);    // disable down-pin after calculated period of time
+
+		}
 
 	}
 	else {
@@ -351,28 +432,22 @@ int main() {
 	sei();                                            // enable interrupts
 
 	/*
-	 * main loop
+	 * main (infinite) loop
 	 */
 	IRMP_DATA irmp_data;
 	while (1) {
 
-		/*
-		 * IR-command received?
-		 */
-		if (irmp_get_data(&irmp_data)) {
+		if (irmp_get_data(&irmp_data)) {              // was an IR-command received?
 
-			process_irmp(&irmp_data);
-
-			// reset "go asleep" timer
-			reset_n_seconds(2, go_asleep);
+			process_irmp(&irmp_data);                 // process the button being pressed
+			reset_n_seconds(SLEEP_TIMEOUT_SECONDS,
+					go_asleep);                       // reset "go asleep" timer
 
 		}
-		/*
-		 * if no IR-command received than go asleep after 2 second
-		 */
-		else if (command == NULL) {
+		else if (command == NULL) {                   // if no IR-command received
 
-			wait_n_seconds(2, go_asleep);
+			wait_n_seconds(SLEEP_TIMEOUT_SECONDS,
+					go_asleep);                       // then go asleep after 2 second
 
 		}
 
