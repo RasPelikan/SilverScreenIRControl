@@ -11,4 +11,4 @@ Breadboard:
 ![breadboard](https://raw.githubusercontent.com/RasPelikan/SilverScreenIRControl/gh-pages/breadboard.png)
 PC:
 ![PCB](https://raw.githubusercontent.com/RasPelikan/SilverScreenIRControl/gh-pages/pcb.png)
-
+(https://raw.githubusercontent.com/RasPelikan/SilverScreenIRControl/gh-pages/pcb_mirror.png)
