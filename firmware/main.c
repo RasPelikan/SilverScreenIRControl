@@ -12,7 +12,7 @@
 /*
  * constants
  */
-#define TIME_PERIOD_FOR_HIDING   60.0                 // time the silver screen needs to hide entirely
+#define TIME_PERIOD_FOR_HIDING   46.0                 // time the silver screen needs to hide entirely
 #define POTI_PROGRAMMING         200                  // max. poti-value which causes programming mode
 #define POTI_PROGRAMMING_DOWN    10                   // max. poti-value which causes programming down-button
 #define ACTIVITY_INDICATOR_PIN   PB0                  // pin for activity indicator
@@ -327,7 +327,16 @@ static void disable_up() {
 }
 
 /*
- * disable down-pin after
+ * disable down-pin
+ */
+static void disable_down_soon() {
+
+	disable_up_and_down();
+
+}
+
+/*
+ * disable down-pin after after the period defined by the potentiometer's position
  */
 static void disable_down() {
 
@@ -358,7 +367,8 @@ static void process_irmp(IRMP_DATA *irmp_data) {
 	 */
 	else if (is_up_button_pressed(irmp_data)) {       // up-button pressed:
 
-		if (command == disable_down) {                // if down is in progress
+		if ((command == disable_down)
+				|| (command == disable_down_soon)) {  // if down is in progress
 
 			wait_n_seconds(0, disable_up_and_down);   // then abort immediately
 
@@ -385,7 +395,11 @@ static void process_irmp(IRMP_DATA *irmp_data) {
 
 			wait_n_seconds(0, disable_up_and_down);   // then abort immediately
 
-		} else {                                      // otherwise:
+		}
+		else if (command == disable_down) {           // if up is already in progress
+                                                      // then do nothing -> ignore it
+		}
+		else {                                        // otherwise:
 
 			PORTB |= _BV(ACTIVITY_INDICATOR_PIN);     // turn on activity indicator
 			PORTB |= _BV(DOWN_PIN);                   // enable down-pin
@@ -395,16 +409,14 @@ static void process_irmp(IRMP_DATA *irmp_data) {
 
 				seconds = TIME_PERIOD_FOR_HIDING /    // the period is the fraction of the defined
 						1024 * poti;                  // up-period proportional to the current poti-position
+				entirely_hidden = false;              // mark as "not entirely hidden"
+				wait_n_seconds(seconds, disable_down);// disable down-pin after calculated period of time
 
 			} else {                                  // otherwise
 
-				seconds = 0.5;                        // do a small step
+				wait_n_seconds(0.5, disable_down_soon);// do a small step
 
 			}
-
-			entirely_hidden = false;                  // mark as "not entirely hidden"
-
-			wait_n_seconds(seconds, disable_down);    // disable down-pin after calculated period of time
 
 		}
 
