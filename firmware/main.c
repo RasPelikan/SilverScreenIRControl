@@ -204,7 +204,9 @@ static void initialize_io() {
 
 	// configure out-pins
 	DDRB |= _BV(ACTIVITY_INDICATOR_PIN) | _BV(UP_PIN) | _BV(DOWN_PIN);
-	PORTB = 0x00;                                     // every pin is low
+	PORTB = _BV(UP_PIN) | _BV(DOWN_PIN);              // every pin except up and down pin is low
+	                                                  // (the relais consumes less current if used
+	                                                  // in active low mode)
 
 }
 
@@ -310,8 +312,7 @@ static bool is_down_button_pressed(IRMP_DATA *irmp_data) {
 static void disable_up_and_down() {
 
 	PORTB &= ~(_BV(ACTIVITY_INDICATOR_PIN));          // turn off activity indicator
-	PORTB &= ~(_BV(UP_PIN));                          // disable up-pin
-	PORTB &= ~(_BV(DOWN_PIN));                        // disable down-pin
+	PORTB |= _BV(UP_PIN) | _BV(DOWN_PIN);             // enable up- and down-pin (active low!)
 
 }
 
@@ -381,7 +382,7 @@ static void process_irmp(IRMP_DATA *irmp_data) {
 			entirely_hidden = false;                  // mark as "not entirely hidden"
 
 			PORTB |= _BV(ACTIVITY_INDICATOR_PIN);     // turn on activity indicator
-			PORTB |= _BV(UP_PIN);                     // enable up-pin
+			PORTB &= ~(_BV(UP_PIN));                  // disable up-pin (active low!)
 
 			wait_n_seconds(TIME_PERIOD_FOR_HIDING,
 					disable_up);                      // disable up-pin after a defined period of time
@@ -402,7 +403,7 @@ static void process_irmp(IRMP_DATA *irmp_data) {
 		else {                                        // otherwise:
 
 			PORTB |= _BV(ACTIVITY_INDICATOR_PIN);     // turn on activity indicator
-			PORTB |= _BV(DOWN_PIN);                   // enable down-pin
+			PORTB &= ~(_BV(DOWN_PIN));                // disable down-pin (active low!)
 
 			float seconds;                            // defining the period of down-movement
 			if (entirely_hidden) {                    // if silver screen was entirely hidden then
