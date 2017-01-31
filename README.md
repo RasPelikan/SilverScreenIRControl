@@ -12,14 +12,22 @@ Update: Added PCB for using TSOP4838 instead of fritzing IR receiver part.
 The firmware is for the ATtiny45 MCU. It can be built using the Eclipse and the "AVR Eclipse Plugin" (http://avr-eclipse.sourceforge.net/wiki/index.php/The_AVR_Eclipse_Plugin).
 
 ## Hardware
+
 Schema:
+
 ![schema](https://raw.githubusercontent.com/RasPelikan/SilverScreenIRControl/gh-pages/schema.png)
+
 Breadboard:
+
 ![breadboard](https://raw.githubusercontent.com/RasPelikan/SilverScreenIRControl/gh-pages/breadboard.png)
+
 PCB:
+
 ![PCB](https://raw.githubusercontent.com/RasPelikan/SilverScreenIRControl/gh-pages/pcb.png)
 (https://raw.githubusercontent.com/RasPelikan/SilverScreenIRControl/gh-pages/etching.pdf)
+
 PCB for TSOP4838:
-![PCB](https://raw.githubusercontent.com/RasPelikan/SilverScreenIRControl/gh-pages/pcb_TSOP4838.png)
+
+![PCB TSOP4838](https://raw.githubusercontent.com/RasPelikan/SilverScreenIRControl/gh-pages/pcb_TSOP4838.png)
 (https://raw.githubusercontent.com/RasPelikan/SilverScreenIRControl/gh-pages/etching_TSOP4838.pdf)
 
