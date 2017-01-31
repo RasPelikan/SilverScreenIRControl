@@ -6,6 +6,8 @@ The controller receives IR signals. If the potentionmeter is at position 0% the 
 
 Hint: The IR signal processed is limited to NEC and Sony remote controls. You might adapt the file irmpconfig.h if your remote control does not work. At this point I want to give a Kudos (https://en.wikipedia.org/wiki/Kudos) to the guys of https://www.mikrocontroller.net/articles/IRMP who implemented the IR multiprotocol decoder I used in this project. They have done a very good job, thank you!
 
+Update: Added PCB for using TSOP4838 instead of fritzing IR receiver part.
+
 ## Firmware
 The firmware is for the ATtiny45 MCU. It can be built using the Eclipse and the "AVR Eclipse Plugin" (http://avr-eclipse.sourceforge.net/wiki/index.php/The_AVR_Eclipse_Plugin).
 
@@ -14,7 +16,10 @@ Schema:
 ![schema](https://raw.githubusercontent.com/RasPelikan/SilverScreenIRControl/gh-pages/schema.png)
 Breadboard:
 ![breadboard](https://raw.githubusercontent.com/RasPelikan/SilverScreenIRControl/gh-pages/breadboard.png)
-PC:
+PCB:
 ![PCB](https://raw.githubusercontent.com/RasPelikan/SilverScreenIRControl/gh-pages/pcb.png)
 (https://raw.githubusercontent.com/RasPelikan/SilverScreenIRControl/gh-pages/etching.pdf)
+PCB for TSOP4838:
+![PCB](https://raw.githubusercontent.com/RasPelikan/SilverScreenIRControl/gh-pages/pcb_TSOP4838.png)
+(https://raw.githubusercontent.com/RasPelikan/SilverScreenIRControl/gh-pages/etching_TSOP4838.pdf)
 
